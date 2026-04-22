@@ -1,0 +1,39 @@
+[project]
+name = "llm-eval-system"
+version = "0.2.0"
+description = "Sistema de chat com avaliação automática (LLM-as-a-Judge) e memória persistente."
+requires-python = ">=3.10"
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "UP",   # pyupgrade
+    "SIM",  # flake8-simplify
+    "RUF",  # ruff-specific
+]
+ignore = ["E501"]  # line length é enforçada pelo formatter
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+
+# Módulos de terceiros sem type stubs
+[[tool.mypy.overrides]]
+module = [
+    "mlflow.*",
+    "langgraph.*",
+    "langchain_groq.*",
+]
+ignore_missing_imports = true
