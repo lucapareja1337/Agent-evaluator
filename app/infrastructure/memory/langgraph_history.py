@@ -26,7 +26,7 @@ import logging
 import threading
 from collections.abc import Sequence
 from contextlib import AbstractContextManager
-from typing import Annotated, TypedDict
+from typing import Annotated, Any, TypedDict
 
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -53,7 +53,7 @@ _ALLOWED_DOMAIN_TYPES = (ChatMessage, Role)
 
 def _build_serializer() -> JsonPlusSerializer:
     """Serializer that allowlists our domain types in msgpack."""
-    return JsonPlusSerializer(allowed_msgpack_modules=_ALLOWED_DOMAIN_TYPES)
+    return JsonPlusSerializer(allowed_json_modules=True)
 
 
 # ----------------------------------------------------------------------
@@ -80,7 +80,7 @@ def _ingest_node(state: _ChatState) -> _ChatState:
     return {"messages": []}
 
 
-def _build_graph(checkpointer: SqliteSaver):
+def _build_graph(checkpointer: SqliteSaver) -> Any:
     """Constrói e compila o grafo mínimo de persistência."""
     builder: StateGraph = StateGraph(_ChatState)
     builder.add_node("ingest", _ingest_node)
@@ -102,7 +102,7 @@ class _LangGraphHistoryView:
     múltiplos lugares (cenário improvável, mas desejável como propriedade).
     """
 
-    def __init__(self, graph, session_id: str, checkpointer: SqliteSaver) -> None:
+    def __init__(self, graph: Any, session_id: str, checkpointer: SqliteSaver) -> None:
         self._graph = graph
         self._session_id = session_id
         self._checkpointer = checkpointer
@@ -112,7 +112,7 @@ class _LangGraphHistoryView:
         return self._session_id
 
     @property
-    def _config(self) -> dict:
+    def _config(self) -> dict[str, Any]:
         return {"configurable": {"thread_id": self._session_id}}
 
     def load(self) -> Sequence[ChatMessage]:
@@ -158,7 +158,7 @@ class _LangGraphHistoryView:
 # ----------------------------------------------------------------------
 
 
-class LangGraphHistoryFactory(AbstractContextManager):
+class LangGraphHistoryFactory(AbstractContextManager["LangGraphHistoryFactory"]):
     """Fábrica de históricos baseada em LangGraph + SqliteSaver.
 
     Mantém uma única instância do grafo e do checkpointer, compartilhada
@@ -175,7 +175,7 @@ class LangGraphHistoryFactory(AbstractContextManager):
         self._checkpointer: SqliteSaver | None = None
         self._graph = None
 
-    def open(self) -> "LangGraphHistoryFactory":
+    def open(self) -> LangGraphHistoryFactory:
         """Inicializa checkpointer e grafo. Idempotente."""
         with self._lock:
             if self._graph is not None:
@@ -205,7 +205,7 @@ class LangGraphHistoryFactory(AbstractContextManager):
                 logger.info("LangGraph history encerrado.")
 
     # Context manager protocol ------------------------------------------
-    def __enter__(self) -> "LangGraphHistoryFactory":
+    def __enter__(self) -> LangGraphHistoryFactory:
         return self.open()
 
     def __exit__(self, exc_type, exc, tb) -> None:

@@ -19,7 +19,10 @@ from app.application.chat_service import ChatService
 from app.config.settings import HistorySettings, Settings
 from app.domain.exceptions import ConfigurationError
 from app.domain.models import Specialty
-from app.domain.ports import ConversationHistoryFactory
+from app.domain.ports import ConversationHistoryFactory, InputGuardrail, OutputGuardrail
+from app.infrastructure.guardrails.composite_guardrail import CompositeGuardrail
+from app.infrastructure.guardrails.llm_guardrail import LLMGuardrail
+from app.infrastructure.guardrails.regex_guardrail import RegexGuardrail
 from app.infrastructure.llm.groq_agent import GroqChatAgent
 from app.infrastructure.llm.groq_judge import GroqJudge
 from app.infrastructure.memory.in_memory import InMemoryHistoryFactory
@@ -103,8 +106,8 @@ def _ask_session_to_resume(
 
     print("\n📚 Sessões anteriores encontradas:")
     for idx, sid in enumerate(sessions, start=1):
-        print(f"  [{idx}] {sid}")
-    print("  [n] Nova sessão (padrão)")
+        print(f" [{idx}] {sid}")
+    print(" [n] Nova sessão (padrão)")
 
     choice = input("Escolha uma opção: ").strip().lower()
     if not choice or choice == "n":
@@ -120,6 +123,54 @@ def _ask_session_to_resume(
     return None
 
 
+def _build_guardrails(
+    settings: Settings,
+) -> tuple[InputGuardrail | None, OutputGuardrail | None]:
+    """Constrói a cadeia de guardrails conforme configuração.
+
+    A ordem importa: RegexGuardrail (rápido, barato) roda antes do
+    LLMGuardrail (lento, semântico) para economizar chamadas LLM
+    em conteúdo obviamente perigoso.
+
+    Retorna (input_guardrail, output_guardrail) — ambos podem ser None
+    se os guardrails estiverem desabilitados.
+    """
+    gs = settings.guardrail
+    if not gs.enabled:
+        logger.info("Guardrails: desabilitados.")
+        return None, None
+
+    layers: list[InputGuardrail | OutputGuardrail] = []
+
+    if gs.regex_enabled:
+        layers.append(RegexGuardrail())
+        logger.info("Guardrails: camada regex ativa.")
+
+    if gs.llm_enabled:
+        layers.append(
+            LLMGuardrail(
+                groq=settings.groq,
+                model=gs.llm_model,
+                threshold=gs.llm_threshold,
+                fail_closed=gs.fail_closed,
+            )
+        )
+        logger.info(
+            "Guardrails: camada LLM ativa (model=%s, threshold=%.2f).",
+            gs.llm_model,
+            gs.llm_threshold,
+        )
+
+    if not layers:
+        logger.info("Guardrails: nenhuma camada ativa.")
+        return None, None
+
+    composite = CompositeGuardrail(layers)
+    return composite, composite
+
+
+# ----------------------------------------------------------------------
+# Entry point
 # ----------------------------------------------------------------------
 # Entry point
 # ----------------------------------------------------------------------
@@ -158,6 +209,8 @@ def main() -> int:
         agent = GroqChatAgent(groq=settings.groq, settings=settings.agent)
         judge = GroqJudge(groq=settings.groq, settings=settings.judge)
 
+        input_guardrail, output_guardrail = _build_guardrails(settings)
+
         service = ChatService(
             agent=agent,
             judge=judge,
@@ -165,6 +218,8 @@ def main() -> int:
             history_factory=history_factory,
             specialty=specialty,
             session_id=session_id,
+            input_guardrail=input_guardrail,
+            output_guardrail=output_guardrail,
         )
 
         cli = ChatCLI(service=service, settings=settings)

@@ -87,3 +87,40 @@ class ChatTurn:
     created_at: datetime = field(
         default_factory=lambda: datetime.now(timezone.utc)
     )
+
+
+class ContentCategory(str, Enum):
+    """Categorias de conteúdo perigoso que os guardrails devem bloquear.
+
+    Seguem as taxonomias padrão da indústria (AWS Bedrock Guardrails,
+    Azure Content Safety, Google Perspective API). Cada categoria mapeia
+    para um conjunto de padrões e regras de detecção.
+    """
+
+    VIOLENCE = "violence"
+    HATE_SPEECH = "hate_speech"
+    SEXUAL_CONTENT = "sexual_content"
+    SELF_HARM = "self_harm"
+    ILLEGAL_ACTIVITY = "illegal_activity"
+    PII = "pii"
+    PROMPT_INJECTION = "prompt_injection"
+
+
+@dataclass(frozen=True, slots=True)
+class GuardrailResult:
+    """Resultado da avaliação de um guardrail.
+
+    Imutável por design: a decisão de bloqueio é atômica e não deve ser
+    alterada após a avaliação. Quando `blocked=True`, `category` e
+    `reason` são obrigatórios para rastreabilidade e auditoria.
+    """
+
+    blocked: bool
+    category: ContentCategory | None = None
+    reason: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.blocked and (self.category is None or self.reason is None):
+            raise ValueError(
+                "GuardrailResult bloqueado deve informar category e reason."
+            )

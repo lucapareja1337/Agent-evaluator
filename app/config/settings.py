@@ -88,6 +88,50 @@ class HistorySettings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="HISTORY_", extra="ignore")
 
 
+class GuardrailSettings(BaseSettings):
+    """Configuração dos guardrails de segurança de conteúdo.
+
+    Os guardrails operam em duas camadas:
+    1. RegexGuardrail: determinístico, baseado em padrões de texto.
+    2. LLMGuardrail: semântico, baseado em classificação via LLM.
+
+    Ambos são opcionais e podem ser desabilitados individualmente.
+    """
+
+    enabled: bool = Field(
+        default=True,
+        description="Ativa ou desativa o sistema de guardrails.",
+    )
+    regex_enabled: bool = Field(
+        default=True,
+        description="Ativa a camada de guardrail regex (determinístico).",
+    )
+    llm_enabled: bool = Field(
+        default=True,
+        description="Ativa a camada de guardrail LLM (semântico).",
+    )
+    llm_model: str = Field(
+        default="llama-3.1-8b-instant",
+        description="Modelo Groq usado pelo guardrail LLM.",
+    )
+    llm_threshold: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=1.0,
+        description="Limiar de confiança para bloqueio (0.0-1.0).",
+    )
+    fail_closed: bool = Field(
+        default=False,
+        description=(
+            "Se True, bloqueia conteúdo quando o guardrail LLM está "
+            "indisponível. Se False (padrão), permite conteúdo quando "
+            "o guardrail falha (fail-open para disponibilidade)."
+        ),
+    )
+
+    model_config = SettingsConfigDict(env_prefix="GUARDRAIL_", extra="ignore")
+
+
 class Settings(BaseSettings):
     """Agregador: expõe todas as seções como atributos.
 
@@ -96,11 +140,12 @@ class Settings(BaseSettings):
     é lançado imediatamente — o que queremos.
     """
 
-    groq: GroqSettings = Field(default_factory=GroqSettings)
+    groq: GroqSettings = Field(default_factory=lambda: GroqSettings())
     agent: AgentSettings = Field(default_factory=AgentSettings)
     judge: JudgeSettings = Field(default_factory=JudgeSettings)
     mlflow: MLflowSettings = Field(default_factory=MLflowSettings)
     history: HistorySettings = Field(default_factory=HistorySettings)
+    guardrail: GuardrailSettings = Field(default_factory=GuardrailSettings)
     log_level: str = Field(default="INFO")
 
     model_config = SettingsConfigDict(

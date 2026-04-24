@@ -21,6 +21,7 @@ from app.domain.models import (
     ChatMessage,
     ChatTurn,
     Evaluation,
+    GuardrailResult,
     Specialty,
 )
 
@@ -120,4 +121,38 @@ class ObservabilityPort(Protocol):
 
     def flush(self) -> None:
         """Garante que todos os eventos em buffer foram persistidos."""
+        ...
+
+
+@runtime_checkable
+class InputGuardrail(Protocol):
+    """Guardrail de entrada: avalia o conteúdo enviado pelo usuário.
+
+    Roda **antes** do agente processar a pergunta. Se bloquear, o turno
+    é interrompido imediatamente — nenhuma chamada LLM é feita, o que
+    economiza custo e previne abuso.
+
+    Implementações típicas:
+    - RegexGuardrail: padrões de texto (palavras-chave, regex)
+    - LLMGuardrail: classificação semântica via LLM
+    - CompositeGuardrail: encadeia múltiplos guardrails em sequência
+    """
+
+    def check(self, text: str) -> GuardrailResult:
+        """Avalia se o texto de entrada é seguro para processamento."""
+        ...
+
+
+@runtime_checkable
+class OutputGuardrail(Protocol):
+    """Guardrail de saída: avalia o conteúdo gerado pelo agente.
+
+    Roda **depois** do agente responder e **antes** de apresentar ao
+    usuário. Se bloquear, a resposta é suprimida e substituída por uma
+    mensagem segura. Protege contra alucinações perigosas, vazamento
+    de PII ou conteúdo gerado que viole políticas.
+    """
+
+    def check(self, text: str) -> GuardrailResult:
+        """Avalia se o texto de saída é seguro para apresentar ao usuário."""
         ...

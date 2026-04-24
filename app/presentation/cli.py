@@ -10,7 +10,7 @@ import logging
 
 from app.application.chat_service import ChatService
 from app.config.settings import Settings
-from app.domain.exceptions import AgentError, JudgeError
+from app.domain.exceptions import AgentError, GuardrailBlockedError, JudgeError
 from app.domain.models import ChatTurn
 
 logger = logging.getLogger(__name__)
@@ -59,11 +59,14 @@ class ChatCLI:
     def _process_turn(self, question: str) -> None:
         try:
             turn = self._service.handle_turn(question)
+        except GuardrailBlockedError as exc:
+            print(f"🛡️ Conteúdo bloqueado: {exc.reason}\n")
+            return
         except AgentError as exc:
-            print(f"⚠️  O agente falhou: {exc}\n")
+            print(f"⚠️ O agente falhou: {exc}\n")
             return
         except JudgeError as exc:
-            print(f"⚠️  Avaliação indisponível neste turno: {exc}\n")
+            print(f"⚠️ Avaliação indisponível neste turno: {exc}\n")
             return
 
         self._print_turn(turn)
@@ -92,7 +95,8 @@ class ChatCLI:
             f"   Memória:  {self._settings.history.backend}\n"
             f"   Sessão:   {self._service.session_id}{resume_info}\n"
             f"   MLflow:   {self._settings.mlflow.tracking_uri}\n"
-            f"   Comandos: 'sair' / 'limpar'\n"
+        f" Guardrails: {'ativos' if self._settings.guardrail.enabled else 'desativados'}\n"
+        f" Comandos: 'sair' / 'limpar'\n"
         )
 
     def _print_footer(self) -> None:

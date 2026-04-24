@@ -30,3 +30,16 @@ class ObservabilityError(DomainError):
 
 class ConfigurationError(DomainError):
     """Configuração inválida ou ausente."""
+
+
+class GuardrailBlockedError(DomainError):
+    """Conteúdo bloqueado por guardrail.
+
+    Contém a categoria e o motivo do bloqueio para que a camada de
+    apresentação possa informar o usuário de forma adequada.
+    """
+
+    def __init__(self, category: str, reason: str) -> None:
+        self.category = category
+        self.reason = reason
+        super().__init__(f"Conteúdo bloqueado [{category}]: {reason}")
